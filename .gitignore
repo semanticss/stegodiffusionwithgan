@@ -1,2 +1,5 @@
 celeba/
-
+*.zip
+*.tar
+*.h5
+*.pkl
