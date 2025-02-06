@@ -3,22 +3,19 @@ import cv2
 import torch
 import numpy as np
 from diffusers import StableDiffusionPipeline
+import torch.nn.functional as F
 
-pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4").to("mps")
+pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4").to("cuda")
 
 
-
-
-def dct2(block):
-    """Apply 2D Discrete Cosine Transform (DCT)."""
+def dct2(block): # 2D Discrete Cosine Transform
     return cv2.dct(np.float32(block))
 
-def idct2(block):
-    """Apply 2D Inverse Discrete Cosine Transform (IDCT)."""
+def idct2(block): # 2D Inverse Discrete Cosine Transform
     return cv2.idct(block)
 
 
-def embed_message_in_dct(image, message, alpha=0.1):
+def embed_message_in_dct(image, message, alpha=0.1): # Encode a binary message into the high-frequency DCT coeffecients of the image.
     """
     Encode a binary message into the high-frequency DCT coefficients of an image.
     Args:
@@ -105,11 +102,11 @@ def generate_stego_image(message, model, method="DCT", alpha=0.1):
         noise = embed_message_in_dct(noise, message, alpha)
 
     # Convert noise to tensor format
-    latent_noise = torch.tensor(noise, dtype=torch.float32).squeeze().unsqueeze(0).to("mps")
+    latent_noise = torch.tensor(noise, dtype=torch.float32).squeeze().unsqueeze(0).to("cuda")
     print(f"Latent Noise Shape: {latent_noise.shape}")
 
     with torch.no_grad():
-        stego_image = model(prompt="A high-quality image", latents=latent_noise)
+        stego_image = model(prompt="ok", latents=latent_noise)
 
     return stego_image.images[0]
 
@@ -136,25 +133,67 @@ message = np.random.randint(0, 2, (3, 64, 64))  # 3 channels, 64x64 image
 stego_image = generate_stego_image(message, pipe, method="MB")
 
 # Extract the message.
-recovered_message = extract_message_from_stego(stego_image, pipe, method="MB")
+recovered_message = extract_message_from_stego(stego_image)
 
-# Accuracy checker.
-accuracy = (message == recovered_message).mean()
+# Convert to PyTorch tensor if needed
+if isinstance(recovered_message, np.ndarray):
+    recovered_message = torch.tensor(recovered_message, dtype=torch.float32)
+
+# Add missing dimensions if necessary
+if recovered_message.dim() == 2:  # Convert (H, W) -> (1, 1, H, W)
+    recovered_message = recovered_message.unsqueeze(0).unsqueeze(0)
+
+# Resize only height & width
+recovered_message_resized = F.interpolate(
+    recovered_message, size=(64, 64), mode='bilinear', align_corners=False
+)
+
+# If `message` has 3 channels but `recovered_message` has 1, expand it
+if message.shape[0] == 3 and recovered_message_resized.shape[1] == 1:
+    recovered_message_resized = recovered_message_resized.repeat(1, 3, 1, 1)
+
+# Remove batch dimension before comparing
+recovered_message_resized = recovered_message_resized.squeeze(0)
+
+# Now the shapes should match:
+print("Final Shapes:")
+print("Message:", message.shape)
+print("Recovered Message Resized:", recovered_message_resized.shape)
+
+# Calculate accuracy
+accuracy = (message == recovered_message_resized).float().mean()
+print("Accuracy:", accuracy.item())
+
+print("Message shape:", message.shape)
+print("Recovered Message shape:", recovered_message.shape)
+print("Recovered Message Resized shape:", recovered_message_resized.shape)
+
+message = torch.tensor(message, dtype=torch.float32)  # Ensure it's a tensor
+recovered_message_resized = recovered_message_resized.float()  # Convert to float
+
+accuracy = (message == recovered_message_resized).float().mean()
 print(f"Message Extraction Accuracy: {accuracy * 100:.2f}%")
 
 
 message = np.random.randint(0, 2, (64, 64))
 
 # Load Stable Diffusion model
-pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4").to("mps")
+pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4").to("cuda")
 
 # Generate stego image
 stego_image = generate_stego_image(message, pipe, method="DCT")
 
 # Extract hidden message
+
+
+
 recovered_message = extract_message_from_stego(stego_image)
 
 # Compare accuracy
-accuracy = (message == recovered_message).mean()
+
+
+
+
+# accuracy = (message == recovered_message).mean()
 print(f"Message Extraction Accuracy: {accuracy * 100:.2f}%")
 
