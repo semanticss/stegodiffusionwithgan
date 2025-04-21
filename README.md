@@ -1,2 +1,2 @@
-# stegodiffusionwithgan
-For my 2024-25 Minnetonka Research project.
+# Diffusion-Stego
+This project embeds binary messages into latent space using Stable Diffusion.

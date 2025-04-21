@@ -1,0 +1,7 @@
+torch
+diffusers
+transformers
+scipy
+Pillow
+matplotlib
+opencv-python

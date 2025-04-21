@@ -1,6 +1,4 @@
-celeba/
-*.zip
-*.tar
-*.h5
-*.pkl
-git 
+__pycache__/
+*.pt
+outputs/
+datasets/
