@@ -10,11 +10,9 @@ def dummy_safety_checker(images, clip_input):
      return images, [False] * len(images)
 
 
-# Load the StableDiffusion model.
 pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4").to("cuda")
 pipe.safety_checker = dummy_safety_checker  # Override filter
 
-# Hyperparameters
 alpha = 0.35
 threshold = 0.05
 prompt = "a very high quality image"
@@ -108,7 +106,6 @@ message = torch.randint(0, 2, (1, 4, 64, 64)).float().to("cuda")
 stego_image, latents_with_message = gen_img(message)
 
 print(f"Latents mean: {latents_with_message.mean().item()}, std: {latents_with_message.std().item()}")
-
 
 plt.imshow(stego_image)
 plt.axis("off")

@@ -1,4 +1,3 @@
-# DCT Steganography with Stable Diffusion
 
 import torch
 import numpy as np
@@ -6,9 +5,11 @@ import cv2
 import matplotlib.pyplot as plt
 from PIL import Image
 from diffusers import StableDiffusionPipeline
-import pandas as pd
 
-pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype = torch.float16).to("cuda")
+pipe = StableDiffusionPipeline.from_pretrained(
+    "CompVis/stable-diffusion-v1-4",
+    torch_dtype=torch.float16
+).to("cuda")
 pipe.safety_checker = lambda images, **kwargs: (images, [False] * len(images))
 
 MSG_SIZE = 16
@@ -44,13 +45,13 @@ def hamming_decode(bits):
         c = np.array(c)
         c = c.reshape(-1, 1)
         if c.shape[0] != 7:
-            continue
+            continue  # skip invalid chunk
         s = tuple((H_dec @ c % 2).flatten())
         if s != (0,0,0):
             error_bit = syndrome_table.get(s, 0)
             if error_bit:
                 c[error_bit-1] ^= 1
-        decoded.append(c[2])  
+        decoded.append(c[2])  # d0
         decoded.append(c[4])  
         decoded.append(c[5])  
         decoded.append(c[6])  
@@ -117,77 +118,3 @@ def generate_stego_image(prompt, message, alpha=DEFAULT_ALPHA):
     decoded = (decoded / 2 + 0.5).clamp(0, 1)
     decoded = decoded.detach().cpu().permute(0, 2, 3, 1).numpy()[0]
     return Image.fromarray((decoded * 255).astype(np.uint8))
-
-text_message = "secret123"
-message = text_to_bit_tensor(text_message)
-
-prompts = [
-    "a detailed macro photograph of multicolored pebbles on a beach",
-    "a high-resolution close-up of rusted metal with peeling paint",
-    "a close-up of moss and lichen growing on stone with rich texture",
-    "a macro image of iridescent soap bubbles on a reflective surface",
-    "a high-resolution macro of a circuit board with colorful resistors and wires"
-]
-
-recovered_votes = []
-for i in range(NUM_SAMPLES):
-    prompt = prompts[i % len(prompts)]
-    stego_image = generate_stego_image(prompt, message)
-    image_tensor = prepare_image_tensor(stego_image)
-    latents = encode_latents(image_tensor)
-    extracted = dct_extract(latents)
-    recovered_votes.append(np.round(extracted).astype(int))
-
-recovered_votes = np.array(recovered_votes)
-bit_majority = (np.mean(recovered_votes, axis=0) > 0.5).astype(int)
-recovered_text = bit_tensor_to_text(torch.tensor(bit_majority))
-original_text = text_message
-bit_accuracy = 100 * (bit_majority == message.cpu().numpy()).mean()
-
-print(f"Original:  {original_text}")
-print(f"Recovered: {recovered_text}")
-print(f"Bit Accuracy: {bit_accuracy:.2f}%")
-
-plt.figure(figsize=(15, 4))
-plt.subplot(1, 3, 1)
-plt.imshow(stego_image)
-plt.title("Stego Image")
-plt.axis("off")
-
-plt.subplot(1, 3, 2)
-plt.imshow(bit_majority[0, USE_TEXTURE_CHANNEL], cmap='gray')
-plt.title("Recovered Bitplane")
-plt.axis("off")
-
-plt.subplot(1, 3, 3)
-plt.imshow((bit_majority != message.cpu().numpy()).astype(float)[0, USE_TEXTURE_CHANNEL], cmap='hot')
-plt.title("Error Heatmap")
-plt.axis("off")
-
-plt.tight_layout()
-plt.show()
-
-# Save images to datasets folder
-import os
-os.makedirs("datasets/stego", exist_ok=True)
-
-stego_image.save("datasets/stego/stego_output.png")
-Image.fromarray((bit_majority[0, USE_TEXTURE_CHANNEL] * 255).astype(np.uint8)).save("datasets/stego/recovered_bitplane.png")
-Image.fromarray(((bit_majority != message.cpu().numpy()).astype(float)[0, USE_TEXTURE_CHANNEL] * 255).astype(np.uint8)).save("datasets/stego/error_map.png")
-
-os.makedirs("results", exist_ok=True)
-pd.DataFrame([{
-    "message": text_message,
-    "recovered_text": recovered_text,
-    "bit_accuracy": bit_accuracy
-}]).to_csv("results/metrics.csv", index=False)
-
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-axes[0].imshow(pipe(prompt=prompts[0], generator=torch.manual_seed(42)).images[0])
-axes[0].set_title("Original Prompt Output")
-axes[0].axis("off")
-axes[1].imshow(stego_image)
-axes[1].set_title("Stego Image")
-axes[1].axis("off")
-plt.tight_layout()
-plt.show()
